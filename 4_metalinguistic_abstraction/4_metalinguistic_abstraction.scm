@@ -1,3 +1,18 @@
+(define apply-in-underlying-scheme apply)
+
+(define (apply procedure arguments)
+  (cond ((primitive-procedure? procedure)
+	 (apply-primitiv-procedure procedure arguments))
+	((compound-procedure? procedure)
+	 #?=(eval-sequence
+	  (procedure-body procedure)
+	  (extend-environment
+	   (procedure-parameters procedure)
+	   arguments
+	   (procedure-environment procedure))))
+	(else
+	 (error "Unknown procedure type -- APPLY" procedure))))
+
 (define (eval exp env)
   (cond ((self-evaluating? exp) exp)
 	((variable? exp) (lookup-variable-value exp env))
@@ -13,25 +28,10 @@
 	 (eval-sequence (begin-actions exp) env))
 	((cond? exp) (eval (cond->if exp) env))
 	((application? exp)
-	 (apply (eval (operator exp) env)
-		(list-of-values (operands exp) env)))
+	 #?=(apply (eval (operator exp) env)
+		   (list-of-values (operands exp) env)))
 	(else
 	 (error "Unknown expression type -- EVAL" exp))))
-
-(define apply-in-underlying-scheme apply)
-
-(define (apply procedure arguments)
-  (cond ((primitive-procedure? procedure)
-	 (apply-primitiv-procedure procedure arguments))
-	((compound-procedure? procedure)
-	 (eval-sequence
-	  (procedure-body procedure)
-	  (extend-environment
-	   (procedure-parameters procedure)
-	   arguments
-	   (procedure-environment procedure))))
-	(else
-	 (error "Unknown procedure type -- APPLY" procedure))))
 
 ; 複数の被演算子を評価する。
 (define (list-of-values exps env)
@@ -158,13 +158,14 @@
 		     (sequence->exp (cond-actions first))
 		     (expand-clauses rest))))))
 
-;; predicate	    
+;;predicate	    
 (define (true? x)
   (not (eq? x #f)))
 (define (false? x)
   (eq? x #f))
 
 ;; procedures
+;; ここで生成されるものの形がおかしい？
 (define (make-procedure parameters body env)
   (list 'procedure parameters body env))
 (define (compound-procedure? p)
@@ -226,8 +227,6 @@
     (define-variable! 'false #f initial-env)
     initial-env))
 
-(define the-global-environment (setup-environment))
-
 ;; primitives
 (define (primitive-procedure? proc)
   (tagged-list? proc 'primitive))
@@ -247,6 +246,8 @@
 (define (apply-primitiv-procedure proc args)
   (apply-in-underlying-scheme
    (primitive-implementation proc) args))
+
+(define the-global-environment (setup-environment))
 
 ;; REPL
 (define input-prompt ";;; M-Eval input:")
