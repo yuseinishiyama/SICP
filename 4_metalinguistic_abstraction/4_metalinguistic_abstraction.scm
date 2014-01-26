@@ -4,7 +4,7 @@
   (cond ((primitive-procedure? procedure)
 	 (apply-primitiv-procedure procedure arguments))
 	((compound-procedure? procedure)
-	 #?=(eval-sequence
+	 (eval-sequence
 	  (procedure-body procedure)
 	  (extend-environment
 	   (procedure-parameters procedure)
@@ -20,6 +20,8 @@
 	((assignment? exp) (eval-assignment exp env))
 	((definition? exp) (eval-definition exp env))
 	((if? exp) (eval-if exp env))
+	((and? exp) (eval-and exp env)) ;; Ex 4.4
+	((or? exp) (eval-or exp env)) ;; Ex 4.4
 	((lambda? exp)
 	 (make-procedure (lambda-parameters exp)
 			 (lambda-body exp)
@@ -28,7 +30,7 @@
 	 (eval-sequence (begin-actions exp) env))
 	((cond? exp) (eval (cond->if exp) env))
 	((application? exp)
-	 #?=(apply (eval (operator exp) env)
+	 (apply (eval (operator exp) env)
 		   (list-of-values (operands exp) env)))
 	(else
 	 (error "Unknown expression type -- EVAL" exp))))
@@ -115,6 +117,29 @@
 (define (make-if predicate consequent alternative)
   (list 'if predicate consequent alternative))
 
+
+;;;;;;;;;;;;;;;;;;;; Ex 4.4 ;;;;;;;;;;;;;;;;;;;;
+;; and
+(define (and? exp) (tagged-list? exp 'and))
+(define (and-predicates exp) (rest-exps exp))
+(define (eval-and exp env)
+  (define (eval-iter predicates result env)
+    (cond ((null? predicates) #t)
+	  ((not (pair? predicates)) result)
+	  ((not (eval (car predicates) env)) #f)
+	  (else (eval-iter (cdr predicates) result env))))
+  (eval-iter (and-predicates exp) '() env))
+;; or
+(define (or? exp) (tagged-list? exp 'or))
+(define (or-predicates exp) (cdr exp))
+(define (eval-or exps env)
+  (if (last-exp? exps) 
+      (eval (first-exp exps) env)
+      (if (eval (first-exp exps) env)
+	  #t
+	  (eval-or (rest-exps exps) env))))
+	     
+
 ;; begin
 (define (begin? exp) (tagged-list? exp 'begin))
 (define (begin-actions exp) (cdr exp))
@@ -165,7 +190,6 @@
   (eq? x #f))
 
 ;; procedures
-;; ここで生成されるものの形がおかしい？
 (define (make-procedure parameters body env)
   (list 'procedure parameters body env))
 (define (compound-procedure? p)
@@ -289,3 +313,4 @@
 		     (procedure-body object)
 		     '<procedure-env>))
       (display object)))
+
