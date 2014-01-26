@@ -20,8 +20,10 @@
 	((assignment? exp) (eval-assignment exp env))
 	((definition? exp) (eval-definition exp env))
 	((if? exp) (eval-if exp env))
-	((and? exp) (eval-and exp env)) ;; Ex 4.4
-	((or? exp) (eval-or exp env)) ;; Ex 4.4
+;;	((and? exp) (eval-and exp env)) ;; Ex 4.4
+	((and? exp) (eval (and->if exp) env))
+;;	((or? exp) (eval-or (or-predicates exp) env)) ;; Ex 4.4
+	((or? exp) (eval (or->if exp) env))
 	((lambda? exp)
 	 (make-procedure (lambda-parameters exp)
 			 (lambda-body exp)
@@ -42,11 +44,6 @@
       (cons (eval (first-operand exps) env)
 	    (list-of-values (rest-operands exps) env))))
 
-(define (eval-if exp env)
-  (if (true? (eval (if-predicate exp) env))
-      (eval (if-consequent exp) env)
-      (eval (if-alternative exp) env)))
-
 (define (eval-sequence exps env)
   (cond ((last-exp? exps) (eval (first-exp exps) env))
 	(else (eval (first-exp exps) env)
@@ -57,12 +54,6 @@
 		       (eval (assignment-value exp) env)
 		       env)
   'ok)
-
-(define (eval-definition exp env)
-  (define-variable! (definition-variable exp)
-    (eval (definition-value exp) env)
-    env)
-'ok)
 
 (define (self-evaluating? exp)
   (cond ((number? exp) #t)
@@ -84,6 +75,12 @@
 (define (assignment-variable exp) (cadr exp))
 (define (assignment-value exp) (caddr exp))
 
+;; definition
+(define (eval-definition exp env)
+  (define-variable! (definition-variable exp)
+    (eval (definition-value exp) env)
+    env)
+'ok)
 (define (definition? exp)
   (tagged-list? exp 'define))
 (define (definition-variable exp)
@@ -107,6 +104,10 @@
   (cons 'lambda (cons parameters body)))
 
 ;; conditionals
+(define (eval-if exp env)
+  (if (true? (eval (if-predicate exp) env))
+      (eval (if-consequent exp) env)
+      (eval (if-alternative exp) env)))
 (define (if? exp) (tagged-list? exp 'if))
 (define (if-predicate exp) (cadr exp))
 (define (if-consequent exp) (caddr exp))
@@ -138,7 +139,24 @@
       (if (eval (first-exp exps) env)
 	  #t
 	  (eval-or (rest-exps exps) env))))
-	     
+
+;; and (derivered)
+(define (and->if exp) (expand-and (rest-exps exp)))
+(define (expand-and predicates)
+  (if (null? predicates)
+      'true
+      (make-if (first-exp predicates)
+	       (expand-and (rest-exps predicates))
+	       'false)))
+;; or (derivered)
+(define (or->if exp) (expand-if (rest-exps exp)))
+(define (expand-if predicates)
+  (if (null? predicates)
+      'false
+      (make-if (first-exp predicates)
+	       'true
+	       (expand-if (rest-exps predicates)))))
+
 
 ;; begin
 (define (begin? exp) (tagged-list? exp 'begin))
