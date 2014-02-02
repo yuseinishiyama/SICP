@@ -30,7 +30,8 @@
 			 env))
 	((begin? exp)
 	 (eval-sequence (begin-actions exp) env))
-	((cond? exp) (eval (cond->if exp) env))
+;;	((cond? exp) (eval (cond->if exp) env)) ;; Ex 4.5
+        ((cond? exp) (eval (cond->if exp env) env))
 	((application? exp)
 	 (apply (eval (operator exp) env)
 		   (list-of-values (operands exp) env)))
@@ -185,21 +186,52 @@
   (eq? (cond-predicate clause) 'else))
 (define (cond-predicate clause) (car clause))
 (define (cond-actions clause) (cdr clause))
-(define (cond->if exp)
-  (expand-clauses (cond-clauses exp)))
-(define (expand-clauses clauses)
+;;;;;;;;;;;;;;;;;;;; Ex 4.5 ;;;;;;;;;;;;;;;;;;;;
+;; (define (cond->if exp)
+;;   (expand-clauses (cond-clauses exp)))
+;; (define (expand-clauses clauses)
+;;   (if (null? clauses)
+;;       'false
+;;       (let ((first (car clauses))
+;; 	    (rest (cdr clauses)))
+;; 	(if (cond-else-clause? first)
+;; 	    (if (null? rest)
+;; 		(sequence->exp (cond-actions first))
+;; 		(error "ELSE clauses isn't last -- COND-IF"
+;; 		       clauses))
+;; 	    (make-if (cond-predicate first)
+;; 		     (sequence->exp (cond-actions first))
+;; 		     (expand-clauses rest))))))
+(define (cond->if exp env)
+  (expand-clauses (cond-clauses exp) env))
+(define (additional-syntax-proc clause)
+  (caddr clause))
+(define (additional-syntax-clause? clause)
+  (if (pair? (cdr clause))
+      (eq? (cadr clause) '=>)
+      #f))
+(define (expand-clauses clauses env)
   (if (null? clauses)
       'false
       (let ((first (car clauses))
 	    (rest (cdr clauses)))
-	(if (cond-else-clause? first)
-	    (if (null? rest)
-		(sequence->exp (cond-actions first))
-		(error "ELSE clauses isn't last -- COND-IF"
-		       clauses))
-	    (make-if (cond-predicate first)
-		     (sequence->exp (cond-actions first))
-		     (expand-clauses rest))))))
+        (cond ((cond-else-clause? first)
+               (if (null? rest)
+                   (sequence->exp (cond-actions first))
+                   (error "ELSE clauses isn't las -- COND-IF"
+                          clauses)))
+              ((additional-syntax-clause? first)
+               (make-if (cond-predicate first)
+                        (eval (list (additional-syntax-proc first) (cond-predicate first)) env)
+                        (expand-clauses rest env)))
+              (else 
+               (make-if (cond-predicate first)
+                        (sequence->exp (cond-actions first))
+                        (expand-clauses rest env)))))))
+;; 実行結果
+;; gosh> (cond ('(a b c) => car))
+;; a
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ;;predicate	    
 (define (true? x)
@@ -305,6 +337,22 @@
 
 (define the-global-environment (setup-environment))
 
+;; 出力結果のBool値を調整する。 
+(define (true-false-adjustment objects)
+  (define (convert object)
+    (cond ((eq? object '#t) 'true)
+          ((eq? object '#f) 'false)
+          (else object)))
+  (if (not (pair? objects))
+      (convert objects)
+      (let ((first (car objects))
+            (rest (cdr objects)))
+               (cons (true-false-adjustment (convert first)) (true-false-adjustment (convert rest))))))
+
+;;(true-false-adjustment '(a b c))
+;;(true-false-adjustment '(a (#t #f) c))
+;;(true-false-adjustment '#f)
+
 ;; REPL
 (define input-prompt ";;; M-Eval input:")
 (define output-prompt ";;; M-Eval value:")
@@ -325,10 +373,11 @@
   (display string)
   (newline))
 (define (user-print object)
-  (if (compound-procedure? object)
-      (display (list 'compound-procedure
-		     (procedure-parameters object)
-		     (procedure-body object)
-		     '<procedure-env>))
-      (display object)))
+  (let ((display-string (if (compound-procedure? object)
+                            (list 'compound-procedure
+                                  (procedure-parameters object)
+                                  (procedure-body object)
+                                  '<procedure-env>)
+                            object)))
+    (display (true-false-adjustment display-string))))
 
